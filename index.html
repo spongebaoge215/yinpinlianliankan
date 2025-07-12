@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>音频设备连连看 - 增强版</title>
+    <title>音频设备连连看 - 专业增强版</title>
     <script src="https://cdn.tailwindcss.com/3.3.3"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
     <style>
@@ -27,6 +27,7 @@
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             text-align: center;
+            position: relative;
         }
         
         .drop-zone {
@@ -117,6 +118,27 @@
             margin-right: 0.5rem;
             margin-bottom: 0.5rem;
         }
+        
+        .tooltip {
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #333;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            white-space: nowrap;
+            opacity: 0;
+            transition: opacity 0.2s;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .device-label:hover .tooltip {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="min-h-screen">
@@ -128,7 +150,7 @@
                 <button id="easyBtn" class="level-btn easy">简单 (5设备)</button>
                 <button id="mediumBtn" class="level-btn medium">中等 (6设备)</button>
                 <button id="hardBtn" class="level-btn hard">困难 (7设备)</button>
-                <button id="expertBtn" class="level-btn expert">专家 (7设备)</button>
+                <button id="expertBtn" class="level-btn expert">专家 (9设备)</button>
             </div>
         </div>
     </div>
@@ -237,7 +259,9 @@
                 4: { name: '音频接口', color: 'bg-yellow-100' },
                 5: { name: '音箱', color: 'bg-red-100' },
                 6: { name: '均衡器', color: 'bg-pink-100' },
-                7: { name: '效果器', color: 'bg-indigo-100' }
+                7: { name: '效果器', color: 'bg-indigo-100' },
+                8: { name: '话放前级', color: 'bg-teal-100', tooltip: '增强麦克风信号的专业设备' },
+                9: { name: '数字调音台', color: 'bg-orange-100', tooltip: '多通道音频信号处理中心' }
             };
             
             // 关卡配置
@@ -265,10 +289,10 @@
                 },
                 4: { 
                     name: '专家', 
-                    deviceCount: 7, 
-                    dropZoneCount: 15, 
+                    deviceCount: 9, 
+                    dropZoneCount: 21, 
                     timeLimit: 30,
-                    correctSequence: ['1', '2', '4', '6', '3', '5', '7']
+                    correctSequence: ['1', '8', '2', '4', '6', '9', '3', '5']
                 }
             };
             
@@ -284,7 +308,7 @@
                 master: { 
                     id: 'master', 
                     title: '设备大师', 
-                    description: '正确识别所有7种设备', 
+                    description: '正确识别所有9种设备', 
                     earned: gameState.achievements.includes('master'),
                     color: 'bg-green-500'
                 },
@@ -355,6 +379,14 @@
                     deviceElement.dataset.device = i;
                     deviceElement.draggable = true;
                     deviceElement.id = `device-${i}`;
+                    
+                    // 添加工具提示
+                    if (device.tooltip) {
+                        const tooltip = document.createElement('div');
+                        tooltip.className = 'tooltip';
+                        tooltip.textContent = device.tooltip;
+                        deviceElement.appendChild(tooltip);
+                    }
                     
                     // 添加拖拽事件
                     deviceElement.addEventListener('dragstart', handleDragStart);
@@ -621,8 +653,8 @@
                     earned.push('novice');
                 }
                 
-                // 设备大师: 正确识别所有7种设备
-                if (gameState.devicesRecognized.length >= 7 && !achievements.master.earned) {
+                // 设备大师: 正确识别所有9种设备
+                if (gameState.devicesRecognized.length >= 9 && !achievements.master.earned) {
                     achievements.master.earned = true;
                     gameState.achievements.push('master');
                     earned.push('master');

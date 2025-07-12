@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>音频设备连连看</title>
+    <title>音频设备连连看 - 增强版</title>
     <script src="https://cdn.tailwindcss.com/3.3.3"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
             background-color: #f8fafc;
             color: #1e293b;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        
+        body.dark-mode {
+            background-color: #1e293b;
+            color: #f8fafc;
         }
         
         .device-label {
@@ -30,8 +37,19 @@
             text-align: center;
         }
         
+        .dark-mode .device-label {
+            background-color: #334155;
+            color: #f8fafc;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+        
         .device-label:active {
             cursor: grabbing;
+        }
+        
+        .device-label.dragging {
+            transform: scale(1.1);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
         }
         
         .drop-zone {
@@ -46,13 +64,27 @@
             background-color: white;
         }
         
+        .dark-mode .drop-zone {
+            background-color: #334155;
+            border-color: #475569;
+        }
+        
         .drop-zone.highlight {
             border-color: #94a3b8;
             background-color: #f1f5f9;
         }
         
+        .dark-mode .drop-zone.highlight {
+            background-color: #475569;
+            border-color: #64748b;
+        }
+        
         .drop-zone:hover {
             background-color: #f1f5f9;
+        }
+        
+        .dark-mode .drop-zone:hover {
+            background-color: #475569;
         }
         
         .drop-zone-content {
@@ -69,21 +101,29 @@
         .correct {
             border-color: #10b981 !important;
             background-color: #ecfdf5;
+            animation: correctPulse 0.5s 3, bounce 0.5s;
+        }
+        
+        .dark-mode .correct {
+            background-color: #064e3b;
         }
         
         .wrong {
             border-color: #ef4444 !important;
             background-color: #fef2f2;
+            animation: shake 0.5s;
+        }
+        
+        .dark-mode .wrong {
+            background-color: #7f1d1d;
+        }
+        
+        .hint {
+            animation: hintGlow 2s;
         }
         
         .score-animation {
             animation: pulse 0.5s ease-in-out;
-        }
-        
-        @keyframes pulse {
-            0% { transform: scale(1); }
-            50% { transform: scale(1.1); }
-            100% { transform: scale(1); }
         }
         
         .valid-sequence {
@@ -101,6 +141,10 @@
             z-index: -1;
         }
         
+        .dark-mode .valid-sequence:hover::after {
+            background-color: rgba(71, 85, 105, 0.7);
+        }
+        
         .score-title {
             font-size: 14px;
         }
@@ -108,138 +152,624 @@
         .score-value {
             font-size: 12px;
         }
+        
+        .timer {
+            font-family: monospace;
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+        
+        .timer.warning {
+            color: #ef4444;
+            animation: pulse 1s infinite;
+        }
+        
+        .dark-mode .timer.warning {
+            color: #fca5a5;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 2rem;
+            border-radius: 0.5rem;
+            max-width: 500px;
+            width: 90%;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        
+        .dark-mode .modal-content {
+            background-color: #334155;
+        }
+        
+        .level-btn {
+            padding: 0.75rem 1.5rem;
+            margin: 0.5rem;
+            border-radius: 0.5rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .level-btn:hover {
+            transform: translateY(-2px);
+        }
+        
+        .level-btn.easy {
+            background-color: #10b981;
+            color: white;
+        }
+        
+        .level-btn.medium {
+            background-color: #3b82f6;
+            color: white;
+        }
+        
+        .level-btn.hard {
+            background-color: #ef4444;
+            color: white;
+        }
+        
+        .dark-mode .level-btn.easy {
+            background-color: #065f46;
+        }
+        
+        .dark-mode .level-btn.medium {
+            background-color: #1d4ed8;
+        }
+        
+        .dark-mode .level-btn.hard {
+            background-color: #b91c1c;
+        }
+        
+        .locked {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        @keyframes correctPulse {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-3px); }
+            75% { transform: translateX(3px); }
+        }
+        
+        @keyframes hintGlow {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            50% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.3); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.5s ease-in;
+        }
+        
+        .volume-slider {
+            width: 100px;
+        }
+        
+        .dark-mode-toggle {
+            position: absolute;
+            top: 1rem;
+            right: 1rem;
+            cursor: pointer;
+            font-size: 1.5rem;
+        }
+        
+        .tab {
+            padding: 0.5rem 1rem;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tab.active {
+            border-bottom-color: #3b82f6;
+            font-weight: bold;
+        }
+        
+        .dark-mode .tab.active {
+            border-bottom-color: #60a5fa;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        .stats-chart-container {
+            height: 300px;
+            width: 100%;
+        }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center py-8 px-4">
-    <h1 class="text-3xl font-bold mb-8">音频设备连连看</h1>
-    
-    <!-- 设备选择区域 -->
-    <div class="mb-12 w-full max-w-4xl">
-        <h2 class="text-xl font-semibold mb-4 text-center">选择设备</h2>
-        <div class="flex justify-around bg-white p-6 rounded-lg shadow-sm gap-4">
-            <div class="device-label" draggable="true" data-device="3" id="monitor-controller">监听控制器</div>
-            <div class="device-label" draggable="true" data-device="4" id="audio-interface">音频接口</div>
-            <div class="device-label" draggable="true" data-device="2" id="preamp">话放</div>
-            <div class="device-label" draggable="true" data-device="5" id="speaker">音箱</div>
-            <div class="device-label" draggable="true" data-device="1" id="mic">话筒</div>
-        </div>
-    </div>
-    
-    <!-- 排列区域 -->
-    <div class="mb-12 w-full max-w-4xl">
-        <h2 class="text-xl font-semibold mb-4 text-center">连接顺序</h2>
-        <div class="flex justify-around bg-white p-6 rounded-lg shadow-sm gap-2">
-            <div class="drop-zone valid-sequence" data-position="1"></div>
-            <div class="drop-zone valid-sequence" data-position="2"></div>
-            <div class="drop-zone valid-sequence" data-position="3"></div>
-            <div class="drop-zone valid-sequence" data-position="4"></div>
-            <div class="drop-zone valid-sequence" data-position="5"></div>
-            <div class="drop-zone valid-sequence" data-position="6"></div>
-            <div class="drop-zone valid-sequence" data-position="7"></div>
-            <div class="drop-zone valid-sequence" data-position="8"></div>
-            <div class="drop-zone valid-sequence" data-position="9"></div>
-            <div class="drop-zone valid-sequence" data-position="10"></div>
-        </div>
-    </div>
-    
-    <!-- 排行榜区域 -->
-    <div class="w-full max-w-md bg-white p-6 rounded-lg shadow-sm">
-        <h2 class="text-xl font-semibold mb-4 text-center score-title">得分</h2>
-        <div class="grid grid-cols-2 gap-4">
-            <div class="bg-slate-50 p-4 rounded">
-                <p class="text-sm text-slate-500 mb-1 score-title">当前得分</p>
-                <p class="text-2xl font-bold score-value" id="current-score">0</p>
-            </div>
-            <div class="bg-slate-50 p-4 rounded">
-                <p class="text-sm text-slate-500 mb-1 score-title">历史最高</p>
-                <p class="text-2xl font-bold score-value" id="high-score">0</p>
+<body class="min-h-screen">
+    <!-- 关卡选择模态框 -->
+    <div id="levelModal" class="modal flex items-center justify-center">
+        <div class="modal-content fade-in">
+            <h2 class="text-2xl font-bold mb-6 text-center">选择关卡</h2>
+            <div class="flex flex-col items-center">
+                <button id="easyBtn" class="level-btn easy">简单 (5设备)</button>
+                <button id="mediumBtn" class="level-btn medium">中等 (6设备)</button>
+                <button id="hardBtn" class="level-btn hard">困难 (7设备)</button>
             </div>
         </div>
-        <button id="check-btn" class="w-full mt-4 bg-slate-800 text-white py-2 px-4 rounded hover:bg-slate-700 transition-colors">
-            检查连接
-        </button>
     </div>
     
-    <footer class="mt-12 text-sm text-slate-500 text-center">
-        <p>created by <a href="https://space.coze.cn" class="text-slate-700 hover:underline">coze space</a></p>
+    <!-- 游戏结束模态框 -->
+    <div id="gameOverModal" class="modal flex items-center justify-center">
+        <div class="modal-content fade-in">
+            <h2 id="gameOverTitle" class="text-2xl font-bold mb-4 text-center"></h2>
+            <div class="text-center mb-6">
+                <p id="gameOverStats"></p>
+                <p id="gameOverTime" class="mt-2"></p>
+            </div>
+            <div class="flex justify-center gap-4">
+                <button id="shareBtn" class="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded">
+                    <i class="fas fa-share-alt mr-2"></i>分享
+                </button>
+                <button id="playAgainBtn" class="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded">
+                    <i class="fas fa-redo mr-2"></i>再玩一次
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 主游戏界面 -->
+    <div class="container mx-auto px-4 py-8 relative">
+        <!-- 深色模式切换 -->
+        <div class="dark-mode-toggle" id="darkModeToggle">
+            <i class="fas fa-moon"></i>
+        </div>
+        
+        <!-- 导航标签 -->
+        <div class="flex justify-center mb-8">
+            <div class="flex bg-white dark:bg-slate-700 rounded-lg shadow-sm">
+                <div class="tab active" data-tab="game">游戏</div>
+                <div class="tab" data-tab="stats">战绩</div>
+            </div>
+        </div>
+        
+        <!-- 游戏内容 -->
+        <div id="gameTab" class="tab-content active">
+            <!-- 计时器 -->
+            <div class="flex justify-between items-center mb-6">
+                <div class="timer" id="timer">01:00</div>
+                <div class="flex items-center gap-4">
+                    <div class="bg-white dark:bg-slate-700 p-2 rounded-lg shadow-sm">
+                        <span class="text-sm mr-2">提示:</span>
+                        <span id="hintCount" class="font-bold">3</span>
+                    </div>
+                    <button id="hintBtn" class="bg-blue-500 hover:bg-blue-600 text-white p-2 rounded-full">
+                        <i class="fas fa-question"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 设备选择区域 -->
+            <div class="mb-12 w-full max-w-4xl mx-auto">
+                <h2 class="text-xl font-semibold mb-4 text-center">选择设备</h2>
+                <div class="flex justify-around bg-white dark:bg-slate-700 p-6 rounded-lg shadow-sm gap-4" id="deviceContainer">
+                    <!-- 设备标签将通过JS动态生成 -->
+                </div>
+            </div>
+            
+            <!-- 排列区域 -->
+            <div class="mb-12 w-full max-w-4xl mx-auto">
+                <h2 class="text-xl font-semibold mb-4 text-center">连接顺序</h2>
+                <div class="flex flex-wrap justify-center bg-white dark:bg-slate-700 p-6 rounded-lg shadow-sm gap-2" id="dropZoneContainer">
+                    <!-- 放置区域将通过JS动态生成 -->
+                </div>
+            </div>
+            
+            <!-- 排行榜区域 -->
+            <div class="w-full max-w-md mx-auto bg-white dark:bg-slate-700 p-6 rounded-lg shadow-sm">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="bg-slate-50 dark:bg-slate-600 p-4 rounded">
+                        <p class="text-sm text-slate-500 dark:text-slate-300 mb-1 score-title">当前得分</p>
+                        <p class="text-2xl font-bold score-value" id="current-score">0</p>
+                    </div>
+                    <div class="bg-slate-50 dark:bg-slate-600 p-4 rounded">
+                        <p class="text-sm text-slate-500 dark:text-slate-300 mb-1 score-title">历史最高</p>
+                        <p class="text-2xl font-bold score-value" id="high-score">0</p>
+                    </div>
+                </div>
+                <button id="check-btn" class="w-full mt-4 bg-slate-800 dark:bg-slate-900 text-white py-2 px-4 rounded hover:bg-slate-700 transition-colors">
+                    检查连接
+                </button>
+                
+                <!-- 音量控制 -->
+                <div class="mt-4 flex items-center">
+                    <i class="fas fa-volume-up mr-2"></i>
+                    <input type="range" min="0" max="100" value="50" class="volume-slider" id="volumeSlider">
+                </div>
+            </div>
+        </div>
+        
+        <!-- 战绩内容 -->
+        <div id="statsTab" class="tab-content">
+            <div class="bg-white dark:bg-slate-700 p-6 rounded-lg shadow-sm">
+                <h2 class="text-xl font-semibold mb-4 text-center">游戏战绩</h2>
+                
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold mb-2">总体统计</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-slate-50 dark:bg-slate-600 p-3 rounded">
+                            <p class="text-sm text-slate-500 dark:text-slate-300">总游戏次数</p>
+                            <p class="text-xl font-bold" id="totalGames">0</p>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-600 p-3 rounded">
+                            <p class="text-sm text-slate-500 dark:text-slate-300">胜率</p>
+                            <p class="text-xl font-bold" id="winRate">0%</p>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-600 p-3 rounded">
+                            <p class="text-sm text-slate-500 dark:text-slate-300">平均用时</p>
+                            <p class="text-xl font-bold" id="avgTime">0秒</p>
+                        </div>
+                        <div class="bg-slate-50 dark:bg-slate-600 p-3 rounded">
+                            <p class="text-sm text-slate-500 dark:text-slate-300">最高连击数</p>
+                            <p class="text-xl font-bold" id="maxCombo">0</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mb-6">
+                    <h3 class="text-lg font-semibold mb-2">关卡统计</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-green-50 dark:bg-green-900 p-3 rounded">
+                            <p class="text-sm text-green-700 dark:text-green-300">简单关卡</p>
+                            <p class="font-bold" id="easyStats">通过: 0次, 最佳: 0分</p>
+                        </div>
+                        <div class="bg-blue-50 dark:bg-blue-900 p-3 rounded">
+                            <p class="text-sm text-blue-700 dark:text-blue-300">中等关卡</p>
+                            <p class="font-bold" id="mediumStats">通过: 0次, 最佳: 0分</p>
+                        </div>
+                        <div class="bg-red-50 dark:bg-red-900 p-3 rounded">
+                            <p class="text-sm text-red-700 dark:text-red-300">困难关卡</p>
+                            <p class="font-bold" id="hardStats">通过: 0次, 最佳: 0分</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3 class="text-lg font-semibold mb-2">胜率趋势</h3>
+                    <div class="stats-chart-container">
+                        <canvas id="statsChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="mt-12 text-sm text-slate-500 dark:text-slate-400 text-center pb-8">
+        <p>created by <a href="https://space.coze.cn" class="text-slate-700 dark:text-slate-300 hover:underline">coze space</a></p>
         <p>页面内容均由 AI 生成，仅供参考</p>
     </footer>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // 从localStorage加载最高分
-            const highScore = localStorage.getItem('audioLinkHighScore') || 0;
-            document.getElementById('high-score').textContent = highScore;
+            // 游戏状态变量
+            let gameState = {
+                currentLevel: 1,
+                score: 0,
+                highScore: localStorage.getItem('audioPuzzle_highScore') || 0,
+                timeLeft: 60,
+                timerInterval: null,
+                hintCount: 3,
+                isPlaying: false,
+                darkMode: localStorage.getItem('audioPuzzle_darkMode') === 'true',
+                volume: parseInt(localStorage.getItem('audioPuzzle_volume')) || 50,
+                playerName: localStorage.getItem('audioPuzzle_playerName') || '玩家1',
+                totalGames: parseInt(localStorage.getItem('audioPuzzle_totalGames')) || 0,
+                wins: parseInt(localStorage.getItem('audioPuzzle_wins')) || 0,
+                totalTime: parseInt(localStorage.getItem('audioPuzzle_totalTime')) || 0,
+                maxCombo: parseInt(localStorage.getItem('audioPuzzle_maxCombo')) || 0,
+                easyWins: parseInt(localStorage.getItem('audioPuzzle_easyWins')) || 0,
+                easyBest: parseInt(localStorage.getItem('audioPuzzle_easyBest')) || 0,
+                mediumWins: parseInt(localStorage.getItem('audioPuzzle_mediumWins')) || 0,
+                mediumBest: parseInt(localStorage.getItem('audioPuzzle_mediumBest')) || 0,
+                hardWins: parseInt(localStorage.getItem('audioPuzzle_hardWins')) || 0,
+                hardBest: parseInt(localStorage.getItem('audioPuzzle_hardBest')) || 0,
+                lastPlayedDate: localStorage.getItem('audioPuzzle_lastPlayedDate') || '',
+                sharedToday: localStorage.getItem('audioPuzzle_sharedToday') === 'true' || false
+            };
             
-            // 拖拽相关变量
-            let draggedItem = null;
-            const dropZones = document.querySelectorAll('.drop-zone');
-            const deviceLabels = document.querySelectorAll('.device-label');
-            const checkBtn = document.getElementById('check-btn');
-            const currentScoreEl = document.getElementById('current-score');
+            // 设备数据
+            const devices = {
+                1: { name: '话筒', color: 'bg-blue-100 dark:bg-blue-900' },
+                2: { name: '话放', color: 'bg-green-100 dark:bg-green-900' },
+                3: { name: '监听控制器', color: 'bg-purple-100 dark:bg-purple-900' },
+                4: { name: '音频接口', color: 'bg-yellow-100 dark:bg-yellow-900' },
+                5: { name: '音箱', color: 'bg-red-100 dark:bg-red-900' },
+                6: { name: '均衡器', color: 'bg-pink-100 dark:bg-pink-900' },
+                7: { name: '效果器', color: 'bg-indigo-100 dark:bg-indigo-900' }
+            };
             
-            // 为设备标签添加拖拽事件
-            deviceLabels.forEach(label => {
-                label.addEventListener('dragstart', function(e) {
-                    draggedItem = this;
-                    e.dataTransfer.setData('text/plain', this.dataset.device);
-                    setTimeout(() => {
-                        this.style.opacity = '0.4';
-                    }, 0);
-                });
-                
-                label.addEventListener('dragend', function() {
-                    this.style.opacity = '1';
-                });
-            });
+            // 关卡配置
+            const levels = {
+                1: { 
+                    name: '简单', 
+                    deviceCount: 5, 
+                    dropZoneCount: 10, 
+                    timeLimit: 60,
+                    correctSequence: ['1', '2', '4', '3', '5']
+                },
+                2: { 
+                    name: '中等', 
+                    deviceCount: 6, 
+                    dropZoneCount: 12, 
+                    timeLimit: 45,
+                    correctSequence: ['1', '2', '4', '3', '5', '6']
+                },
+                3: { 
+                    name: '困难', 
+                    deviceCount: 7, 
+                    dropZoneCount: 15, 
+                    timeLimit: 30,
+                    correctSequence: ['1', '2', '4', '3', '5', '6', '7']
+                }
+            };
             
-            // 为放置区域添加拖拽事件
-            dropZones.forEach(zone => {
-                zone.addEventListener('dragenter', function(e) {
-                    e.preventDefault();
-                    this.classList.add('highlight');
-                });
+            // 音效
+            const sounds = {
+                dragStart: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-select-click-1109.mp3'),
+                correct: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-correct-answer-tone-2870.mp3'),
+                wrong: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-wrong-answer-fail-notification-946.mp3'),
+                hint: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-software-interface-start-2574.mp3'),
+                victory: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-winning-chimes-2015.mp3'),
+                timeUp: new Audio('https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3')
+            };
+            
+            // 初始化UI
+            function initUI() {
+                // 设置深色模式
+                if (gameState.darkMode) {
+                    document.body.classList.add('dark-mode');
+                    document.getElementById('darkModeToggle').innerHTML = '<i class="fas fa-sun"></i>';
+                }
                 
-                zone.addEventListener('dragover', function(e) {
-                    e.preventDefault();
-                });
+                // 设置音量
+                document.getElementById('volumeSlider').value = gameState.volume;
+                setVolume(gameState.volume);
                 
-                zone.addEventListener('dragleave', function() {
-                    this.classList.remove('highlight');
-                });
+                // 更新战绩显示
+                updateStatsDisplay();
                 
-                zone.addEventListener('drop', function(e) {
-                    e.preventDefault();
-                    this.classList.remove('highlight');
+                // 显示关卡选择
+                showLevelSelect();
+            }
+            
+            // 显示关卡选择
+            function showLevelSelect() {
+                document.getElementById('levelModal').style.display = 'flex';
+                
+                // 解锁已通过的关卡
+                const easyBtn = document.getElementById('easyBtn');
+                const mediumBtn = document.getElementById('mediumBtn');
+                const hardBtn = document.getElementById('hardBtn');
+                
+                easyBtn.classList.remove('locked');
+                mediumBtn.classList.remove('locked');
+                hardBtn.classList.remove('locked');
+                
+                // 根据最高解锁关卡锁定按钮
+                const maxUnlockedLevel = localStorage.getItem('audioPuzzle_maxUnlockedLevel') || 1;
+                
+                if (maxUnlockedLevel < 2) {
+                    mediumBtn.classList.add('locked');
+                    hardBtn.classList.add('locked');
+                } else if (maxUnlockedLevel < 3) {
+                    hardBtn.classList.add('locked');
+                }
+            }
+            
+            // 开始游戏
+            function startGame(level) {
+                gameState.currentLevel = level;
+                gameState.score = 0;
+                gameState.timeLeft = levels[level].timeLimit;
+                gameState.hintCount = 3;
+                gameState.isPlaying = true;
+                
+                // 更新UI
+                document.getElementById('levelModal').style.display = 'none';
+                document.getElementById('current-score').textContent = gameState.score;
+                document.getElementById('high-score').textContent = gameState.highScore;
+                document.getElementById('hintCount').textContent = gameState.hintCount;
+                updateTimerDisplay();
+                
+                // 生成设备
+                generateDevices();
+                
+                // 生成放置区域
+                generateDropZones();
+                
+                // 开始计时
+                startTimer();
+            }
+            
+            // 生成设备
+            function generateDevices() {
+                const deviceContainer = document.getElementById('deviceContainer');
+                deviceContainer.innerHTML = '';
+                
+                const levelConfig = levels[gameState.currentLevel];
+                
+                for (let i = 1; i <= levelConfig.deviceCount; i++) {
+                    const device = devices[i];
+                    const deviceElement = document.createElement('div');
+                    deviceElement.className = `device-label ${device.color}`;
+                    deviceElement.textContent = device.name;
+                    deviceElement.dataset.device = i;
+                    deviceElement.draggable = true;
+                    deviceElement.id = `device-${i}`;
                     
-                    const deviceType = e.dataTransfer.getData('text/plain');
-                    const deviceText = document.getElementById(getDeviceId(deviceType)).textContent;
+                    // 添加拖拽事件
+                    deviceElement.addEventListener('dragstart', handleDragStart);
+                    deviceElement.addEventListener('dragend', handleDragEnd);
                     
-                    // 清空当前区域
-                    while (this.firstChild) {
-                        this.removeChild(this.firstChild);
+                    deviceContainer.appendChild(deviceElement);
+                }
+            }
+            
+            // 生成放置区域
+            function generateDropZones() {
+                const dropZoneContainer = document.getElementById('dropZoneContainer');
+                dropZoneContainer.innerHTML = '';
+                
+                const levelConfig = levels[gameState.currentLevel];
+                
+                for (let i = 0; i < levelConfig.dropZoneCount; i++) {
+                    const dropZone = document.createElement('div');
+                    dropZone.className = 'drop-zone valid-sequence';
+                    dropZone.dataset.position = i + 1;
+                    
+                    // 添加拖拽事件
+                    dropZone.addEventListener('dragenter', handleDragEnter);
+                    dropZone.addEventListener('dragover', handleDragOver);
+                    dropZone.addEventListener('dragleave', handleDragLeave);
+                    dropZone.addEventListener('drop', handleDrop);
+                    
+                    dropZoneContainer.appendChild(dropZone);
+                }
+            }
+            
+            // 开始计时器
+            function startTimer() {
+                clearInterval(gameState.timerInterval);
+                
+                gameState.timerInterval = setInterval(function() {
+                    gameState.timeLeft--;
+                    updateTimerDisplay();
+                    
+                    if (gameState.timeLeft <= 10) {
+                        document.getElementById('timer').classList.add('warning');
+                        playSound(sounds.timeUp);
                     }
                     
-                    // 添加设备文字标签
-                    const content = document.createElement('div');
-                    content.className = 'drop-zone-content';
-                    content.textContent = deviceText;
-                    
-                    this.appendChild(content);
-                    this.dataset.filled = deviceType;
-                });
-            });
+                    if (gameState.timeLeft <= 0) {
+                        endGame(false);
+                    }
+                }, 1000);
+            }
             
-            // 检查按钮点击事件
-            checkBtn.addEventListener('click', function() {
-                const zones = Array.from(dropZones);
+            // 更新计时器显示
+            function updateTimerDisplay() {
+                const minutes = Math.floor(gameState.timeLeft / 60);
+                const seconds = gameState.timeLeft % 60;
+                document.getElementById('timer').textContent = 
+                    `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            }
+            
+            // 拖拽开始
+            function handleDragStart(e) {
+                draggedItem = this;
+                e.dataTransfer.setData('text/plain', this.dataset.device);
+                this.classList.add('dragging');
+                playSound(sounds.dragStart);
+                
+                // 创建拖拽预览
+                setTimeout(() => {
+                    this.style.opacity = '0.4';
+                }, 0);
+            }
+            
+            // 拖拽结束
+            function handleDragEnd() {
+                this.classList.remove('dragging');
+                this.style.opacity = '1';
+            }
+            
+            // 拖拽进入放置区域
+            function handleDragEnter(e) {
+                e.preventDefault();
+                this.classList.add('highlight');
+            }
+            
+            // 拖拽在放置区域上
+            function handleDragOver(e) {
+                e.preventDefault();
+            }
+            
+            // 拖拽离开放置区域
+            function handleDragLeave() {
+                this.classList.remove('highlight');
+            }
+            
+            // 放置
+            function handleDrop(e) {
+                e.preventDefault();
+                this.classList.remove('highlight');
+                
+                const deviceType = e.dataTransfer.getData('text/plain');
+                const deviceText = document.getElementById(`device-${deviceType}`).textContent;
+                
+                // 清空当前区域
+                while (this.firstChild) {
+                    this.removeChild(this.firstChild);
+                }
+                
+                // 添加设备文字标签
+                const content = document.createElement('div');
+                content.className = 'drop-zone-content';
+                content.textContent = deviceText;
+                
+                this.appendChild(content);
+                this.dataset.filled = deviceType;
+                
+                // 如果有拖拽的设备，恢复其显示
+                if (draggedItem) {
+                    draggedItem.style.opacity = '1';
+                    draggedItem = null;
+                }
+            }
+            
+            // 检查连接
+            function checkConnections() {
+                const zones = Array.from(document.querySelectorAll('.drop-zone'));
+                const levelConfig = levels[gameState.currentLevel];
                 let bestSequence = null;
                 let bestScore = 0;
                 
-                // 检查所有可能的5个连续框体组合
-                for (let i = 0; i <= 5; i++) {
-                    const sequence = zones.slice(i, i + 5);
-                    const score = evaluateSequence(sequence);
+                // 检查所有可能的连续框体组合
+                for (let i = 0; i <= zones.length - levelConfig.correctSequence.length; i++) {
+                    const sequence = zones.slice(i, i + levelConfig.correctSequence.length);
+                    const score = evaluateSequence(sequence, levelConfig.correctSequence);
                     
                     if (score > bestScore) {
                         bestScore = score;
@@ -248,19 +778,21 @@
                 }
                 
                 // 重置所有框体样式
-                dropZones.forEach(zone => {
+                zones.forEach(zone => {
                     zone.classList.remove('correct', 'wrong');
                 });
                 
                 // 计算得分
-                const totalScore = Math.round((bestScore / 5) * 100);
-                currentScoreEl.textContent = totalScore;
-                currentScoreEl.classList.add('score-animation');
+                const sequenceScore = Math.round((bestScore / levelConfig.correctSequence.length) * 100);
+                gameState.score = sequenceScore;
+                document.getElementById('current-score').textContent = gameState.score;
+                document.getElementById('current-score').classList.add('score-animation');
                 
                 // 更新最高分
-                if (totalScore > highScore) {
-                    document.getElementById('high-score').textContent = totalScore;
-                    localStorage.setItem('audioLinkHighScore', totalScore);
+                if (sequenceScore > gameState.highScore) {
+                    gameState.highScore = sequenceScore;
+                    localStorage.setItem('audioPuzzle_highScore', gameState.highScore);
+                    document.getElementById('high-score').textContent = gameState.highScore;
                 }
                 
                 // 标记正确和错误的框体
@@ -269,38 +801,39 @@
                     bestSequence.forEach((zone, index) => {
                         if (index < bestScore) {
                             zone.classList.add('correct');
+                            playSound(sounds.correct);
                         } else {
                             zone.classList.add('wrong');
+                            playSound(sounds.wrong);
                         }
                     });
                     
-                    // 标记序列后的所有框体为错误
-                    const startIndex = Array.from(dropZones).indexOf(bestSequence[0]);
-                    for (let i = startIndex + bestScore; i < dropZones.length; i++) {
-                        dropZones[i].classList.add('wrong');
+                    // 检查是否完成
+                    if (bestScore === levelConfig.correctSequence.length) {
+                        endGame(true);
                     }
                 } else {
                     // 没有找到有效序列，标记所有放置了设备的框体为错误
-                    dropZones.forEach(zone => {
+                    zones.forEach(zone => {
                         if (zone.dataset.filled) {
                             zone.classList.add('wrong');
+                            playSound(sounds.wrong);
                         }
                     });
                 }
                 
                 // 移除动画类
                 setTimeout(() => {
-                    currentScoreEl.classList.remove('score-animation');
+                    document.getElementById('current-score').classList.remove('score-animation');
                 }, 500);
-            });
+            }
             
             // 评估序列是否符合正确顺序
-            function evaluateSequence(sequence) {
-                const expectedOrder = ['1', '2', '4', '3', '5']; // 话筒→话放→音频接口→监听控制器→音箱
+            function evaluateSequence(sequence, correctSequence) {
                 let score = 0;
                 
                 for (let i = 0; i < sequence.length; i++) {
-                    if (sequence[i].dataset.filled === expectedOrder[i]) {
+                    if (sequence[i].dataset.filled === correctSequence[i]) {
                         score++;
                     } else {
                         break;
@@ -310,17 +843,309 @@
                 return score;
             }
             
-            // 根据设备类型获取元素ID
-            function getDeviceId(deviceType) {
-                switch(deviceType) {
-                    case '1': return 'mic';
-                    case '2': return 'preamp';
-                    case '3': return 'monitor-controller';
-                    case '4': return 'audio-interface';
-                    case '5': return 'speaker';
-                    default: return '';
+            // 使用提示
+            function useHint() {
+                if (gameState.hintCount <= 0 || !gameState.isPlaying) return;
+                
+                gameState.hintCount--;
+                document.getElementById('hintCount').textContent = gameState.hintCount;
+                playSound(sounds.hint);
+                
+                if (gameState.hintCount <= 0) {
+                    document.getElementById('hintBtn').classList.add('opacity-50');
+                    document.getElementById('hintBtn').disabled = true;
+                }
+                
+                const zones = Array.from(document.querySelectorAll('.drop-zone'));
+                const levelConfig = levels[gameState.currentLevel];
+                
+                // 找到第一个未正确放置的设备
+                for (let i = 0; i < zones.length; i++) {
+                    const zone = zones[i];
+                    const expectedDevice = levelConfig.correctSequence[i % levelConfig.correctSequence.length];
+                    
+                    if (!zone.dataset.filled || zone.dataset.filled !== expectedDevice) {
+                        zone.classList.add('hint');
+                        
+                        // 移除提示效果
+                        setTimeout(() => {
+                            zone.classList.remove('hint');
+                        }, 2000);
+                        
+                        break;
+                    }
                 }
             }
+            
+            // 结束游戏
+            function endGame(isWin) {
+                clearInterval(gameState.timerInterval);
+                gameState.isPlaying = false;
+                
+                // 更新游戏统计
+                const today = new Date().toISOString().split('T')[0];
+                gameState.totalGames++;
+                
+                if (isWin) {
+                    gameState.wins++;
+                    const timeUsed = levels[gameState.currentLevel].timeLimit - gameState.timeLeft;
+                    gameState.totalTime += timeUsed;
+                    
+                    // 更新关卡最佳成绩
+                    if (gameState.currentLevel === 1) {
+                        if (gameState.score > gameState.easyBest) {
+                            gameState.easyBest = gameState.score;
+                        }
+                        gameState.easyWins++;
+                    } else if (gameState.currentLevel === 2) {
+                        if (gameState.score > gameState.mediumBest) {
+                            gameState.mediumBest = gameState.score;
+                        }
+                        gameState.mediumWins++;
+                    } else if (gameState.currentLevel === 3) {
+                        if (gameState.score > gameState.hardBest) {
+                            gameState.hardBest = gameState.score;
+                        }
+                        gameState.hardWins++;
+                    }
+                    
+                    // 解锁下一关卡
+                    if (gameState.currentLevel < 3) {
+                        const maxUnlocked = Math.max(gameState.currentLevel + 1, parseInt(localStorage.getItem('audioPuzzle_maxUnlockedLevel')) || 1);
+                        localStorage.setItem('audioPuzzle_maxUnlockedLevel', maxUnlocked);
+                    }
+                    
+                    // 播放胜利音效
+                    playSound(sounds.victory);
+                    
+                    // 显示胜利模态框
+                    document.getElementById('gameOverTitle').textContent = '恭喜过关！';
+                    document.getElementById('gameOverStats').textContent = `得分: ${gameState.score}`;
+                    document.getElementById('gameOverTime').textContent = `用时: ${timeUsed}秒`;
+                } else {
+                    // 播放失败音效
+                    playSound(sounds.timeUp);
+                    
+                    // 显示失败模态框
+                    document.getElementById('gameOverTitle').textContent = '时间到！';
+                    document.getElementById('gameOverStats').textContent = `得分: ${gameState.score}`;
+                    document.getElementById('gameOverTime').textContent = '';
+                }
+                
+                // 保存游戏状态
+                saveGameState();
+                
+                // 显示游戏结束模态框
+                document.getElementById('gameOverModal').style.display = 'flex';
+            }
+            
+            // 保存游戏状态
+            function saveGameState() {
+                localStorage.setItem('audioPuzzle_highScore', gameState.highScore);
+                localStorage.setItem('audioPuzzle_darkMode', gameState.darkMode);
+                localStorage.setItem('audioPuzzle_volume', gameState.volume);
+                localStorage.setItem('audioPuzzle_playerName', gameState.playerName);
+                localStorage.setItem('audioPuzzle_totalGames', gameState.totalGames);
+                localStorage.setItem('audioPuzzle_wins', gameState.wins);
+                localStorage.setItem('audioPuzzle_totalTime', gameState.totalTime);
+                localStorage.setItem('audioPuzzle_maxCombo', gameState.maxCombo);
+                localStorage.setItem('audioPuzzle_easyWins', gameState.easyWins);
+                localStorage.setItem('audioPuzzle_easyBest', gameState.easyBest);
+                localStorage.setItem('audioPuzzle_mediumWins', gameState.mediumWins);
+                localStorage.setItem('audioPuzzle_mediumBest', gameState.mediumBest);
+                localStorage.setItem('audioPuzzle_hardWins', gameState.hardWins);
+                localStorage.setItem('audioPuzzle_hardBest', gameState.hardBest);
+                localStorage.setItem('audioPuzzle_lastPlayedDate', new Date().toISOString().split('T')[0]);
+            }
+            
+            // 更新战绩显示
+            function updateStatsDisplay() {
+                document.getElementById('totalGames').textContent = gameState.totalGames;
+                document.getElementById('winRate').textContent = gameState.totalGames > 0 
+                    ? `${Math.round((gameState.wins / gameState.totalGames) * 100)}%` 
+                    : '0%';
+                document.getElementById('avgTime').textContent = gameState.wins > 0 
+                    ? `${Math.round(gameState.totalTime / gameState.wins)}秒` 
+                    : '0秒';
+                document.getElementById('maxCombo').textContent = gameState.maxCombo;
+                
+                document.getElementById('easyStats').textContent = 
+                    `通过: ${gameState.easyWins}次, 最佳: ${gameState.easyBest}分`;
+                document.getElementById('mediumStats').textContent = 
+                    `通过: ${gameState.mediumWins}次, 最佳: ${gameState.mediumBest}分`;
+                document.getElementById('hardStats').textContent = 
+                    `通过: ${gameState.hardWins}次, 最佳: ${gameState.hardBest}分`;
+                
+                // 更新图表
+                updateStatsChart();
+            }
+            
+            // 更新战绩图表
+            function updateStatsChart() {
+                const ctx = document.getElementById('statsChart').getContext('2d');
+                
+                // 示例数据 - 实际应用中应从localStorage获取历史数据
+                const labels = ['第1周', '第2周', '第3周', '第4周'];
+                const data = [30, 45, 60, 75]; // 示例胜率数据
+                
+                new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '胜率趋势',
+                            data: data,
+                            borderColor: '#3b82f6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                max: 100,
+                                ticks: {
+                                    callback: function(value) {
+                                        return value + '%';
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // 播放音效
+            function playSound(sound) {
+                sound.volume = gameState.volume / 100;
+                sound.currentTime = 0;
+                sound.play().catch(e => console.log('无法播放音效:', e));
+            }
+            
+            // 设置音量
+            function setVolume(volume) {
+                gameState.volume = volume;
+                localStorage.setItem('audioPuzzle_volume', volume);
+                
+                // 更新所有音效的音量
+                Object.values(sounds).forEach(sound => {
+                    sound.volume = volume / 100;
+                });
+            }
+            
+            // 切换深色模式
+            function toggleDarkMode() {
+                gameState.darkMode = !gameState.darkMode;
+                localStorage.setItem('audioPuzzle_darkMode', gameState.darkMode);
+                
+                if (gameState.darkMode) {
+                    document.body.classList.add('dark-mode');
+                    document.getElementById('darkModeToggle').innerHTML = '<i class="fas fa-sun"></i>';
+                } else {
+                    document.body.classList.remove('dark-mode');
+                    document.getElementById('darkModeToggle').innerHTML = '<i class="fas fa-moon"></i>';
+                }
+            }
+            
+            // 切换标签页
+            function switchTab(tabName) {
+                // 更新活动标签
+                document.querySelectorAll('.tab').forEach(tab => {
+                    tab.classList.remove('active');
+                    if (tab.dataset.tab === tabName) {
+                        tab.classList.add('active');
+                    }
+                });
+                
+                // 更新内容显示
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                    if (content.id === tabName + 'Tab') {
+                        content.classList.add('active');
+                    }
+                });
+            }
+            
+            // 分享成绩
+            function shareResult() {
+                const today = new Date().toISOString().split('T')[0];
+                
+                if (navigator.share) {
+                    navigator.share({
+                        title: '音频设备连连看',
+                        text: `我在音频连连看${levels[gameState.currentLevel].name}关卡获得了${gameState.score}分，用时${levels[gameState.currentLevel].timeLimit - gameState.timeLeft}秒，快来挑战！`,
+                        url: window.location.href
+                    }).then(() => {
+                        // 分享成功，检查是否可以奖励分数
+                        if (today !== gameState.lastPlayedDate || !gameState.sharedToday) {
+                            gameState.score += 50;
+                            gameState.sharedToday = true;
+                            localStorage.setItem('audioPuzzle_sharedToday', 'true');
+                            alert('分享成功！获得50分奖励！');
+                        }
+                    }).catch(err => {
+                        console.log('分享失败:', err);
+                    });
+                } else {
+                    // 不支持Web Share API，使用备用分享方式
+                    const shareText = `我在音频连连看${levels[gameState.currentLevel].name}关卡获得了${gameState.score}分，用时${levels[gameState.currentLevel].timeLimit - gameState.timeLeft}秒，快来挑战！ ${window.location.href}`;
+                    prompt('复制以下内容分享:', shareText);
+                    
+                    // 检查是否可以奖励分数
+                    if (today !== gameState.lastPlayedDate || !gameState.sharedToday) {
+                        gameState.score += 50;
+                        gameState.sharedToday = true;
+                        localStorage.setItem('audioPuzzle_sharedToday', 'true');
+                        alert('分享成功！获得50分奖励！');
+                    }
+                }
+            }
+            
+            // 事件监听
+            document.getElementById('easyBtn').addEventListener('click', function() {
+                if (!this.classList.contains('locked')) {
+                    startGame(1);
+                }
+            });
+            
+            document.getElementById('mediumBtn').addEventListener('click', function() {
+                if (!this.classList.contains('locked')) {
+                    startGame(2);
+                }
+            });
+            
+            document.getElementById('hardBtn').addEventListener('click', function() {
+                if (!this.classList.contains('locked')) {
+                    startGame(3);
+                }
+            });
+            
+            document.getElementById('check-btn').addEventListener('click', checkConnections);
+            document.getElementById('hintBtn').addEventListener('click', useHint);
+            document.getElementById('darkModeToggle').addEventListener('click', toggleDarkMode);
+            document.getElementById('playAgainBtn').addEventListener('click', function() {
+                document.getElementById('gameOverModal').style.display = 'none';
+                showLevelSelect();
+            });
+            
+            document.getElementById('shareBtn').addEventListener('click', shareResult);
+            
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', function() {
+                    switchTab(this.dataset.tab);
+                });
+            });
+            
+            document.getElementById('volumeSlider').addEventListener('input', function() {
+                setVolume(this.value);
+            });
+            
+            // 初始化游戏
+            initUI();
         });
     </script>
 </body>
